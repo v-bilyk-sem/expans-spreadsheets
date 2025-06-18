@@ -7,8 +7,60 @@ function onOpen() {
     .addItem('Import all CSVs', 'importCSVsFromFolder')
     .addItem('Freeze 1st Row All Sheets', 'freezeFirstRowsAllSheets')
     .addItem('Crop Sheets to Data', 'cropAllSheetsToData')
+    .addItem('Combine Non-Hidden Sheets', 'combineNonHiddenSheets')
     .addToUi();
 }
+
+/**
+ * combineNonHiddenSheets:
+ * - skips hidden sheets
+ * - takes the first sheet’s header row as the master header
+ * - for every sheet (including the first), grabs rows 2..last and prefixes with sheet name
+ * - writes everything into a “Combined” sheet (re-creating it each time)
+ */
+function combineNonHiddenSheets() {
+  const ss = SpreadsheetApp.getActive();
+  const all = ss.getSheets().filter(s => !s.isSheetHidden());
+  if (all.length === 0) {
+    SpreadsheetApp.getUi().alert('No visible sheets to combine.');
+    return;
+  }
+  // delete old Combined sheet if it exists
+  const combinedName = 'Combined';
+  let combined = ss.getSheetByName(combinedName);
+  if (combined) ss.deleteSheet(combined);
+  combined = ss.insertSheet(combinedName);
+
+  // build header from first sheet
+  const first = all[0];
+  const lastCol = first.getLastColumn();
+  const headerRow = first.getRange(1, 1, 1, lastCol).getValues()[0];
+  combined
+    .getRange(1, 1, 1, headerRow.length + 1)
+    .setValues([['Sheet Name', ...headerRow]]);
+
+  // gather data rows from every sheet (skipping row 1)
+  const out = [];
+  all.forEach(sheet => {
+    const name = sheet.getName();
+    const lr = sheet.getLastRow();
+    if (lr < 2) return;            // nothing beyond header
+    const data = sheet
+      .getRange(2, 1, lr - 1, lastCol)
+      .getValues();
+    data.forEach(r => out.push([name, ...r]));
+  });
+
+  // write them out
+  if (out.length) {
+    combined
+      .getRange(2, 1, out.length, headerRow.length + 1)
+      .setValues(out);
+  }
+  SpreadsheetApp.getUi().alert('Sheets combined into “Combined”.');
+}
+
+
 
 /**
  * cropAllSheetsToData:
